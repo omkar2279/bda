@@ -1,0 +1,104 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+# Load the dataset
+data = pd.read_csv('/content/bank_marketing_updated_v1.csv')
+
+# Clean and preprocess the data
+data.columns = [
+    'CustomerID', 'Age', 'Salary', 'Balance', 'Marital', 'JobEdu',
+    'Targeted', 'Default', 'HousingLoan', 'Loan', 'Contact', 'Day',
+    'Month', 'Duration', 'Campaign', 'Pdays', 'Previous', 'Poutcome', 'Response'
+]
+
+# Remove unwanted rows with header-like text
+data = data[~data['CustomerID'].str.contains("customer", na=False, case=False)]
+
+# Convert columns to appropriate data types
+data['Age'] = pd.to_numeric(data['Age'], errors='coerce')
+data['Salary'] = pd.to_numeric(data['Salary'], errors='coerce')
+data['Balance'] = pd.to_numeric(data['Balance'], errors='coerce')
+
+# Checking for missing values
+print("Missing Values in Dataset:")
+print(data.isnull().sum())
+
+# Handle missing values (drop rows with missing data)
+data = data.dropna()
+
+# Convert categorical columns to numerical (Label Encoding)
+categorical_columns = ['Marital', 'HousingLoan', 'Loan', 'Targeted', 'Default', 'Contact', 'Poutcome', 'Response']
+for col in categorical_columns:
+    data[col] = data[col].astype('category').cat.codes
+
+# Histograms for numerical attributes
+numerical_columns = ['Age', 'Salary', 'Balance']
+for col in numerical_columns:
+    plt.figure(figsize=(8, 5))
+    sns.histplot(data[col], kde=True, bins=30, color='blue')
+    plt.title(f'Histogram of {col}')
+    plt.xlabel(col)
+    plt.ylabel('Frequency')
+    plt.show()
+
+# Pie charts for categorical attributes
+for col in categorical_columns:
+    plt.figure(figsize=(6, 6))
+    data[col].value_counts().plot.pie(
+        autopct='%1.1f%%', colors=sns.color_palette('pastel'), title=f'Distribution of {col}'
+    )
+    plt.ylabel('')
+    plt.show()
+
+for col in numerical_columns:
+    plt.figure(figsize=(14, 6))
+    sns.boxplot(data=data, y=col, x='Marital', palette='Set2')
+    plt.title(f'{col} Distribution by Marital Status')
+    plt.ylabel(col)
+    plt.xlabel('Marital Status')
+    plt.show()
+
+# Pairplot for numeric vs numeric
+sns.pairplot(data, vars=numerical_columns, diag_kind='kde', palette='husl')
+plt.show()
+
+# Pairplot for categorical vs numeric (with hue)
+sns.pairplot(data, hue='Marital', vars=numerical_columns, diag_kind='kde', palette='Set1')
+plt.show()
+
+
+plt.figure(figsize=(8, 5))
+sns.countplot(data=data, x='Marital', hue='Loan', palette='Set2')
+plt.title('Marital Status vs Loan')
+plt.xlabel('Marital Status')
+plt.ylabel('Count of Customers')
+plt.legend(title='Has Loan? (0 = No, 1 = Yes)')
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.histplot(data=data, x='Salary', hue='Loan', bins=30, kde=True, palette='coolwarm', alpha=0.7)
+plt.title('Salary Distribution for Loan Holders vs Non-Holders')
+plt.xlabel('Salary')
+plt.ylabel('Count')
+plt.legend(title='Has Loan? (0 = No, 1 = Yes)')
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.histplot(data=data, x='Balance', hue='Loan', bins=30, kde=True, palette='viridis', alpha=0.7)
+plt.title('Bank Balance Distribution for Loan Holders vs Non-Holders')
+plt.xlabel('Bank Balance')
+plt.ylabel('Count')
+plt.legend(title='Has Loan? (0 = No, 1 = Yes)')
+plt.show()
+
+# Create a correlation matrix
+heatmap_data = data[['Age', 'Salary', 'Balance', 'Marital', 'HousingLoan', 'Loan', 'Targeted', 'Default', 'Pdays', 'Previous', 'Campaign']]
+correlation_matrix = heatmap_data.corr()
+
+# Plot the heatmap
+plt.figure(figsize=(12, 8))
+sns.heatmap(correlation_matrix, annot=True, fmt='.2f', cmap='coolwarm', cbar=True, square=True)
+plt.title('Heatmap of All Attributes')
+plt.show()

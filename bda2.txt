@@ -1,0 +1,30 @@
+import numpy as np
+import pandas as pd
+from scipy import stats
+import statsmodels.api as sm
+from statsmodels.formula.api import ols
+from statsmodels.stats.weightstats import ztest
+from sklearn.preprocessing import LabelEncoder
+
+df = pd.read_csv("titanic.csv")
+
+df.head()
+
+df.isnull().sum()
+df.info()
+
+t_stats, p_value = stats.ttest_ind(df['Confirmed'], df['Deaths'])
+print(f"T_test p_value: {p_value}")
+
+z_test, p_value = ztest(df['Confirmed'], df['Deaths'])
+print(f"Z_test p_value: {p_value}")
+
+le = LabelEncoder()
+df['Country_encoded'] = le.fit_transform(df['Deaths'])
+
+contingency_table = pd.crosstab(df['Country_encoded'], df['Deaths'])chi2_stat, p_value, dof, expected = stats.chi2_contingency(contingency_table)
+print(f"Chi2_test p_value: {p_value}")
+
+anova_results = stats.f_oneway(df[df['WHO Region'] == 'Europe']['Confirmed'], df[df['WHO Region'] == 'Africa']['Confirmed'])
+print(f"ANOVA p_value: {anova_results.pvalue}")
+

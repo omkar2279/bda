@@ -1,0 +1,88 @@
+#Random forest
+
+from pyspark.sql import SparkSession
+from pyspark.ml.stat import Correlation
+import pyspark.sql.functions as F
+
+spark = SparkSession.builder.getOrCreate()
+
+df = spark.read.csv("/content/sample_data/pima.csv", inferSchema=True,
+                   header=True)
+
+df.show()
+
+df.select("class").show()
+
+df.count()
+
+len(df.columns)
+
+df.printSchema()
+
+df.describe().show()
+
+df.head(5)
+
+df.groupBy('class').count().show()
+
+df.groupBy('age').count().show()
+
+df.groupBy('mass').count().show()
+
+from pyspark.ml.feature import VectorAssembler
+
+df.columns
+
+assembler= VectorAssembler(inputCols=['preg', 'plas', 'pres', 'skin', 'test', 'mass', 'pedi', 'age'],
+                           outputCol='features')
+assembler
+
+output= assembler.transform(df)
+output
+
+output.select('features','class').show(5)
+
+df.columns
+
+model_df=output.select(['features','class'])
+
+training_df,test_df=model_df.randomSplit([0.70,0.30])
+print(training_df.count())
+
+print(test_df.count())
+
+from pyspark.ml.classification import RandomForestClassifier
+
+
+rf_classifier=RandomForestClassifier(labelCol='class',numTrees=50).fit(training_df)
+
+# training results
+rf_predictions=rf_classifier.transform(test_df)
+rf_predictions.show()
+
+rf_predictions.groupBy('prediction').count().show()
+
+
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+rf_accuracy=MulticlassClassificationEvaluator(labelCol='class',
+                                              metricName='accuracy').evaluate(rf_predictions)
+print(rf_accuracy)
+
+#precision
+rf_precision=MulticlassClassificationEvaluator(labelCol='class',metricName='weightedPrecision').evaluate(rf_predictions)
+print(rf_precision)
+
+
+# AUC
+rf_auc=BinaryClassificationEvaluator(labelCol='class').evaluate(rf_predictions)
+print(rf_auc)
+
+# feature importance
+rf_classifier.featureImportances
+
+
+
+
+

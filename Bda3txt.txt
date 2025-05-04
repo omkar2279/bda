@@ -1,0 +1,206 @@
+!ls
+
+# Installing JDK
+!apt-get install openjdk-8-jdk-headless -qq
+
+# Getting Spark installer (check the path on spark.apache.org)
+!wget https://downloads.apache.org/spark/spark-3.5.5/spark-3.5.5-bin-hadoop3.tgz
+
+# Checking if the file is copied
+!ls
+
+# Untar the Spark installer
+!tar -xvf spark-3.5.5-bin-hadoop3.tgz
+
+# Checking the Spark folder after untar
+!ls
+
+!apt-get install openjdk-11-jdk-headless -qq > /dev/null
+
+# Setting environment variables: Setting Java and Spark home based on the location where they are stored
+import os
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-11-openjdk-amd64"
+os.environ["SPARK_HOME"] = "/content/spark-3.5.5-bin-hadoop3"
+
+!pip install -q findspark pyspark
+
+
+# Creating a local Spark session
+import findspark
+findspark.init()
+
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.master("local[*]").appName("ColabSpark").getOrCreate()
+
+# Loading data in pandas dataframe
+import pandas as pd
+amazon_df = pd.read_csv("/content/sample_data/Amazon_Responded_Oct05.csv", on_bad_lines='skip')
+amazon_df.head()
+
+amazon_df.shape
+
+# Dropping all null rows
+amazon_df.dropna(how="all", inplace=True)
+amazon_df.shape
+
+# Replacing carriage return and new line characters with a space
+amazon_df = amazon_df.replace({r'\r\n': ' '}, regex=True)
+amazon_df.head()
+
+
+# Converting Pandas Dataframe into Spark Dataframe
+amazon_df = amazon_df.astype(str) # Converting pandas df to string first
+amazon_sdf = spark.createDataFrame(amazon_df)
+amazon_sdf.show(10, False) # False allows us to show entire content of the columns
+
+amazon_sdf.columns
+
+amazon_sdf.printSchema()
+
+amazon_sdf.count()
+
+# Extracting columns 'user_id_str', 'user_followers_count', and 'text_'
+amazon_sub_df = amazon_sdf.select(amazon_sdf.user_id_str, amazon_sdf.user_followers_count.cast('int').alias('user_followers_count'), amazon_sdf.text_)
+amazon_sub_df.show(20, False)
+
+amazon_sub_df.printSchema()
+
+spark = SparkSession.builder \
+    .appName("SparkApplication") \
+    .config("spark.executor.memory", "4g") \
+    .config("spark.driver.memory", "4g") \
+    .config("spark.executor.cores", "2") \
+    .getOrCreate()
+
+# Load the data into the DataFrame (avoid reading it multiple times)
+amazon_sub_df = spark.read.csv('/content/sample_data/Amazon_Responded_Oct05.csv', header=True, inferSchema=False)
+
+# Select only the needed columns
+amazon_sub_df = amazon_sub_df.select("user_id_str", "user_followers_count", "text_")
+
+# Cache the DataFrame to memory (before any transformations)
+amazon_sub_df.cache()
+
+# Filter out null values
+amazon_sub_df = amazon_sub_df.filter(amazon_sub_df.user_id_str.isNotNull())
+
+# Perform the distinct count
+amazon_sub_df.select(f.countDistinct("user_id_str")).show()
+
+
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("SparkApplication").getOrCreate()
+
+# Load the data into a DataFrame
+amazon_sub_df = spark.read.csv('/content/sample_data/Amazon_Responded_Oct05.csv', header=True, inferSchema=True)
+
+# Count distinct user_id_str
+amazon_sub_df.select(f.countDistinct("user_id_str")).show()
+
+
+# Checking number of rows (tweets) for a particular user
+amazon_sub_df.filter(amazon_sub_df.user_id_str == '85741735').count()
+
+
+
+import pyspark.sql.functions as f
+maxf = amazon_sub_df.groupBy("user_id_str").agg(f.max("user_followers_count").alias("max")).alias("maxf")
+maxf.show()
+
+
+
+maxf.count()
+
+
+
+from pyspark.sql.functions import col
+amazon_sub_df = amazon_sub_df.alias("amazon_sub_df") # defining alias for original df
+amazon_sub_df2 = amazon_sub_df.join(maxf, (col("user_followers_count") == col("max")) &
+                                    (col("amazon_sub_df.user_id_str") == col("maxf.user_id_str"))).select(
+                                     col("amazon_sub_df.user_id_str"), col("amazon_sub_df.user_followers_count"), col("amazon_sub_df.text_"))
+
+
+amazon_sub_df2.show(20, False)
+
+
+amazon_sub_df2.count()
+
+amazon_sub_df2.filter(amazon_sub_df2.user_id_str == '85741735').count()
+
+popular_df = amazon_sub_df2.filter(amazon_sub_df2.user_followers_count >= 5000)
+popular_df.count()
+
+popular_df.show(20, False)
+
+
+popular_df.sort(popular_df.user_followers_count).show(20, False)
+
+
+popular_df.sort((popular_df.user_followers_count).desc()).show(20, False)
+
+popular_df.select('user_id_str').distinct().count()
+
+
+groupedUsers = popular_df.groupby('user_id_str').count().withColumnRenamed("count","tweet_count")
+
+groupedUsers.sort((groupedUsers.tweet_count).desc()).show(20)
+
+tweet = popular_df.select("text_").rdd.flatMap(lambda x: x).collect()
+tweet[0:5]
+
+
+from pyspark import SparkContext
+sc = SparkContext.getOrCreate()
+
+
+tweet_rdd = sc.parallelize(tweet)
+tweet_rdd.take(5)
+
+import string
+import re
+
+def clean_tweet(x):
+
+  # Delete all the URLs in the tweets
+  text00 = re.sub(r'www\S+', '', x)
+  text01 = re.sub(r'http\S+', '', text00)
+
+  # Delete all the numbers in the tweets
+  text1 = ''.join([i for i in text01 if not i.isdigit()])
+
+  # Delete all the punctuation marks in the tweets
+  text2 = text1.translate(str.maketrans('','',string.punctuation))
+
+  # Convert text to LOWERCASE
+  text3 = text2.lower()
+
+  return text3
+
+
+# Step 1: Filter out None tweets
+valid_tweet_rdd = tweet_rdd.filter(lambda tweet: tweet is not None)
+
+# Step 2: Map clean_tweet only on valid entries
+clean_tweet_rdd = valid_tweet_rdd.map(clean_tweet)
+
+# Step 3: Show first 10 results
+clean_tweet_rdd.take(10)
+
+
+map = clean_tweet_rdd.flatMap(lambda line: line.split(" ")).map(lambda word: (word, 1))
+map.take(5)
+
+counts = map.reduceByKey(lambda a, b: a + b)
+counts.take(5)
+
+
+print(len(counts.collect()))
+
+countsSortedTopTen = counts.takeOrdered(10, lambda a: -a[1] if len(a[0]) > 0 else False) # Conditioned on that number of characters in the string should be at least 1
+countsSortedTopTen
+
+
+
+
+

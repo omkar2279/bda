@@ -1,0 +1,39 @@
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder.appName("SparkSQL").getOrCreate()
+
+data = spark.read.options(inferSchema='True',header='True').csv("investments.csv")
+
+data.show()
+
+data.columns
+
+data.printSchema()
+
+data.createOrReplaceTempView('investment')
+
+spark.sql("select * from investment limit 10").show()
+
+spark.sql("select * from investment where country_code == 'USA'").show()
+
+usstrartsup = spark.sql("select * from investment where country_code == 'USA'")
+
+usstrartsup.show()
+
+usstrartsup.createOrReplaceTempView('usstartup_table')
+
+spark.sql("select * from usstartup_table limit 10").show()
+
+most_seed = spark.sql("select * from usstartup_table order by seed desc")
+
+most_seed.select('name','seed').show()
+
+most_seed.head(1)
+
+most_seed_startup = most_seed.head(1)[0].asDict()
+
+most_seed_startup
+
+most_seed_startup['venture']
+
+most_seed_startup['first_funding_at']
